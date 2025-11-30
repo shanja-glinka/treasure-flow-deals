@@ -37,6 +37,7 @@ export class Auction {
   description: string | null;
 
   item: Types.ObjectId;
+  items: Types.ObjectId[];
 
   seller: Types.ObjectId;
 

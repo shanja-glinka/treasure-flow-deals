@@ -13,7 +13,11 @@ import {
 } from '@root/src/app/core/constants';
 import { ValidatorHelper } from '@root/src/app/core/helpers';
 import { Types } from 'mongoose';
-import { Deal, DealTypeEnum } from '../../../core/schemas/deal.schema';
+import {
+  Deal,
+  DealModeEnum,
+  DealStatusEnum,
+} from '../../../core/schemas/deal.schema';
 import { IDealRepository } from '../interfaces/deal.repository.interface';
 import { CreateDealRequestDto } from '../types';
 
@@ -59,7 +63,7 @@ export class DealService {
     }
 
     // Проверяем, что аукцион не активен
-    if (entity.status === DealTypeEnum.ACTIVE) {
+    if (entity.status === DealStatusEnum.ACTIVE) {
       throw new BadRequestException('Аукцион уже запущен.');
     }
   }
@@ -96,14 +100,14 @@ export class DealService {
     }
 
     // Проверка на завершённость
-    if (entity.status === DealTypeEnum.ENDED) {
+    if (entity.status === DealStatusEnum.ENDED) {
       throw new BadRequestException(
         'Сделка уже завершена. Дальнейшие действия с ней запрещены.',
       );
     }
 
     // Изменение статуса и установка времени завершения (если не установлено)
-    entity.status = DealTypeEnum.ENDED;
+    entity.status = DealStatusEnum.ENDED;
     entity.endedAt = entity.endedAt ?? new Date();
 
     await this.dealRepository.saveEntity(entity);
@@ -128,36 +132,104 @@ export class DealService {
    * @returns {Promise<any>} Созданная сделка
    */
   public async createDeal(data: CreateDealRequestDto): Promise<any> {
-    // Проверка на дублирование по аукциону
-    const exists = await this.dealRepository.findBy(
-      { auction: ValidatorHelper.validateObjectId(data.auction) },
-      true,
-    );
-    if (exists) {
-      return await this.dealRepository.findOneBy(
-        { auction: ValidatorHelper.validateObjectId(data.auction) },
+    const auctionId =
+      data.auction !== undefined && data.auction !== null
+        ? ValidatorHelper.validateObjectId(data.auction)
+        : null;
+
+    if (auctionId) {
+      const exists = await this.dealRepository.findBy(
+        { auction: auctionId },
         true,
-        false,
+      );
+      if (exists) {
+        return await this.dealRepository.findOneBy(
+          { auction: auctionId },
+          true,
+          false,
+        );
+      }
+    }
+
+    const sellerId = ValidatorHelper.validateObjectId(data.seller);
+    const buyerId =
+      data.buyer !== null && data.buyer !== undefined
+        ? ValidatorHelper.validateObjectId(data.buyer)
+        : null;
+
+    const normalizedItems = (data.items ?? []).map((item) => {
+      const itemId = ValidatorHelper.validateObjectId(item.itemId);
+      const coinId = ValidatorHelper.validateObjectId(item.coinId);
+      const conditionId = item.conditionId
+        ? ValidatorHelper.validateObjectId(item.conditionId)
+        : null;
+
+      return {
+        itemId,
+        coinId,
+        conditionId,
+        quantity: item.quantity ?? 1,
+        price: item.price,
+        snapshot: item.snapshot ?? null,
+      };
+    });
+
+    if (!normalizedItems.length) {
+      throw new BadRequestException(
+        'Сделка должна содержать хотя бы один предмет',
       );
     }
 
-    const dealData: Partial<Deal> = {
-      ...data,
-      item: ValidatorHelper.validateObjectId(data.item),
-      coin: ValidatorHelper.validateObjectId(data.coin),
-      seller: ValidatorHelper.validateObjectId(data.seller),
-      auction: ValidatorHelper.validateObjectId(data.auction),
-      buyer:
-        data.buyer !== null
-          ? ValidatorHelper.validateObjectId(data.buyer)
-          : null,
-      condition: ValidatorHelper.validateObjectId(data.condition),
-      status: DealTypeEnum.ACTIVE,
-      endedAt: new Date(data.endedAt),
+    const primaryItem = normalizedItems[0];
+
+    const autoCancelAt = data.guarantee?.autoCancelAt
+      ? new Date(data.guarantee.autoCancelAt)
+      : data.meta?.autoCancelAt
+        ? new Date(data.meta.autoCancelAt as any)
+        : null;
+
+    const guarantee = {
+      enabled: !!data.guarantee?.enabled,
+      initiatedBy: data.guarantee?.initiatedBy
+        ? ValidatorHelper.validateObjectId(data.guarantee.initiatedBy)
+        : null,
+      sellerApproved: data.guarantee?.sellerApproved ?? false,
+      buyerApproved: data.guarantee?.buyerApproved ?? false,
+      sellerApprovedAt: data.guarantee?.sellerApprovedAt
+        ? new Date(data.guarantee.sellerApprovedAt)
+        : null,
+      buyerApprovedAt: data.guarantee?.buyerApprovedAt
+        ? new Date(data.guarantee.buyerApprovedAt)
+        : null,
+      autoCancelAt,
     };
 
+    const dealData: Partial<Deal> = {
+      seller: sellerId,
+      buyer: buyerId,
+      mode: data.mode ?? DealModeEnum.DIRECT,
+      status: data.status ?? DealStatusEnum.PENDING_SELLER,
+      items: normalizedItems as any,
+      startingPrice: data.startingPrice,
+      finalPrice: data.finalPrice ?? null,
+      guarantee,
+      auctionStats: data.auctionStats ?? {
+        totalBids: 0,
+        highestBid: 0,
+        auctionDuration: 0,
+      },
+      autoCancelAt,
+      item: primaryItem.itemId,
+      coin: primaryItem.coinId,
+      condition: primaryItem.conditionId ?? undefined,
+    };
+
+    if (auctionId) {
+      dealData.auction = auctionId;
+    }
+
     // Создаем и сохраняем сделку через репозиторий, используя метод create
-    const deal = await this.dealRepository.create(dealData);
+    const deal = await this.dealRepository.create(dealData as Deal);
 
     // Генерируем событие о создании сделки
     this.eventEmitter.emit(EventDealCreated, deal);

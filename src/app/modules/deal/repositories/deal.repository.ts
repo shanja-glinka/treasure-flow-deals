@@ -6,7 +6,7 @@ import { FilterQuery, Model, Types } from 'mongoose';
 import {
   Deal,
   DealDocument,
-  DealTypeEnum,
+  DealStatusEnum,
 } from '../../../core/schemas/deal.schema';
 import { IDealRepository } from '../interfaces/deal.repository.interface';
 
@@ -163,7 +163,7 @@ export class DealRepository implements IDealRepository {
     const now = new Date();
 
     const filter: any = {
-      status: DealTypeEnum.ACTIVE,
+      status: DealStatusEnum.ACTIVE,
       startAt: { $lte: now },
     };
 
@@ -187,7 +187,7 @@ export class DealRepository implements IDealRepository {
 
     return this.dealModel
       .find({
-        status: DealTypeEnum.ACTIVE,
+        status: DealStatusEnum.ACTIVE,
         endedAt: { $lte: now },
       })
       .exec();
