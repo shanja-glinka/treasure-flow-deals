@@ -2,12 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { EntityNotFoundMessage } from '@root/src/app/core/constants';
 import { ValidatorHelper } from '@root/src/app/core/helpers';
+import { IPaginationResult } from '@root/src/app/core/common/filters/search/interfaces/pagination.interface';
 import { FilterQuery, Model, Types } from 'mongoose';
 import {
   Deal,
   DealDocument,
   DealStatusEnum,
 } from '../../../core/schemas/deal.schema';
+import { FindDealDTO } from '../dto/get-deal.dto';
 import { IDealRepository } from '../interfaces/deal.repository.interface';
 
 @Injectable()
@@ -191,5 +193,79 @@ export class DealRepository implements IDealRepository {
         endedAt: { $lte: now },
       })
       .exec();
+  }
+
+  async searchUserDeals(
+    match: FilterQuery<DealDocument>,
+    dto: FindDealDTO,
+  ): Promise<IPaginationResult<DealDocument>> {
+    const query = this.buildSearchQuery(match, dto);
+    const { itemsPerPage, currentPage } = this.extractPagination(dto);
+
+    const [items, totalItems] = await Promise.all([
+      this.dealModel
+        .find(query)
+        .sort({ updatedAt: -1 })
+        .skip((currentPage - 1) * itemsPerPage)
+        .limit(itemsPerPage)
+        .populate([
+          'seller',
+          'buyer',
+          {
+            path: 'item',
+            populate: {
+              path: 'coin',
+              model: 'Coin',
+            },
+          },
+        ])
+        .exec(),
+      this.dealModel.countDocuments(query),
+    ]);
+
+    const totalPages =
+      totalItems === 0 ? 0 : Math.ceil(totalItems / itemsPerPage);
+
+    return {
+      items,
+      meta: {
+        totalItems,
+        itemsPerPage,
+        totalPages,
+        currentPage,
+      },
+    };
+  }
+
+  async countUserDeals(
+    match: FilterQuery<DealDocument>,
+    dto?: FindDealDTO,
+  ): Promise<number> {
+    const query = this.buildSearchQuery(match, dto);
+    return this.dealModel.countDocuments(query);
+  }
+
+  private buildSearchQuery(
+    match: FilterQuery<DealDocument>,
+    dto?: FindDealDTO,
+  ): FilterQuery<DealDocument> {
+    const query: FilterQuery<DealDocument> = { ...match };
+    const status = dto?.filter?.status;
+    if (status) {
+      query.status = status;
+    }
+    return query;
+  }
+
+  private extractPagination(dto?: FindDealDTO): {
+    itemsPerPage: number;
+    currentPage: number;
+  } {
+    const itemsPerPage = Math.max(
+      1,
+      Math.min(dto?.pagination?.itemsPerPage ?? 10, 100),
+    );
+    const currentPage = Math.max(dto?.pagination?.currentPage ?? 1, 1);
+    return { itemsPerPage, currentPage };
   }
 }

@@ -5,6 +5,7 @@ import {
   Inject,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
@@ -44,6 +45,13 @@ import {
   IMessagesService,
 } from '../interfaces/deal.interfaces';
 import { IDealMemoryManagerService } from '../interfaces/memory-manager.service.interface';
+import { DealService } from '../services/deal.service';
+import {
+  DealCounterOfferDto,
+  DealCounterOfferResponseDto,
+  DealDisputeDto,
+} from '../dto/deal-action.dto';
+import { IsMongoId } from 'class-validator';
 
 /**
  * Декоратор создает новый контекст для работы рест функций.
@@ -100,6 +108,29 @@ export function WithClientContext() {
     origin: '*',
   },
 })
+class DealIdPayload {
+  @IsMongoId()
+  dealId: string;
+}
+
+class DealDisputePayload extends DealDisputeDto {
+  @IsMongoId()
+  dealId: string;
+}
+
+class DealCounterOfferPayload extends DealCounterOfferDto {
+  @IsMongoId()
+  dealId: string;
+}
+
+class DealCounterOfferRespondPayload extends DealCounterOfferResponseDto {
+  @IsMongoId()
+  dealId: string;
+
+  @IsMongoId()
+  counterOfferId: string;
+}
+
 export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   public server: Server;
@@ -124,6 +155,9 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * Нужно, чтобы ограничить общее кол-во подключений до connectionsLimit.
    */
   private userSockets = new Map<string, string[]>();
+  private readonly messageWindowMs = 10 * 1000;
+  private readonly messageLimit = 5;
+  private readonly messageBuckets = new Map<string, number[]>();
 
   constructor(
     @Inject(IMessagesServiceToken)
@@ -137,6 +171,8 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     @Inject(IDealValidationServiceToken)
     private readonly validationService: IDealValidationService,
+
+    private readonly dealService: DealService,
 
     private readonly clsServiceAdapter: ClsServiceAdapter,
   ) {}
@@ -178,7 +214,7 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       // Привязываем userId к клиенту (на будущее для handleDisconnect)
       client.data.userId = userId;
-      client.data.dealId = userId;
+      client.data.dealId = dealId;
 
       // Не даём больше this.connectionsLimit соединений: закрываем одно из старых
       this.ensureConnectionLimit(userId, client);
@@ -201,6 +237,8 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
         // Заходим в "комнату" аукциона
         client.join(dealId);
+        this.dealManagerService.registerOnline(dealId, userId);
+        this.dealManagerService.touch(dealId);
 
         // Для наглядности
         this.logger.log(
@@ -229,6 +267,7 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
   public async handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
     const userId = client.data.userId as string;
+    const dealId = client.data.dealId as string | undefined;
     if (userId) {
       const sockets = this.userSockets.get(userId);
       if (sockets) {
@@ -240,6 +279,9 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
           this.userSockets.delete(userId);
         }
       }
+    }
+    if (dealId) {
+      this.dealManagerService.unregisterOnline(dealId, userId);
     }
   }
 
@@ -344,6 +386,7 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private refreshUserActivity(client: Socket, userId: string, dealId: string) {
     const key = `${userId}_${dealId}`;
     this.userActivity.set(key, Date.now());
+    this.dealManagerService.touch(dealId);
     this.scheduleInactivityCheck(client, userId, dealId, key);
   }
 
@@ -422,6 +465,29 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     };
   }
 
+  private getUserId(client: Socket): string {
+    const user = client.data.user;
+    const userId = user?._id?.toString?.();
+    if (!userId) {
+      throw new UnauthorizedException('User is not authorized');
+    }
+    return userId;
+  }
+
+  private assertMessageRate(userId: string): void {
+    const now = Date.now();
+    const windowStart = now - this.messageWindowMs;
+    const bucket = this.messageBuckets.get(userId) ?? [];
+    const recent = bucket.filter((ts) => ts >= windowStart);
+    if (recent.length >= this.messageLimit) {
+      throw new ForbiddenException(
+        'Слишком много сообщений. Попробуйте чуть позже.',
+      );
+    }
+    recent.push(now);
+    this.messageBuckets.set(userId, recent);
+  }
+
   /***************************************************************************
    * СОБЫТИЯ ОТ КЛИЕНТА
    ***************************************************************************/
@@ -436,10 +502,12 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       data.user = this.getShortUser(client);
       data.userId = data.user._id.toString();
+      this.assertMessageRate(data.userId);
 
       await this.messagesService.addMessage(data);
 
       this.refreshUserActivity(client, data.userId, data.dealId);
+      this.dealManagerService.touch(data.dealId);
 
       SocketResponseHelper.sendSuccessResponse(client, {
         message: 'Сообщение успешно зарегистрировано',
@@ -464,10 +532,138 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await this.messagesService.addReaction(data);
 
       this.refreshUserActivity(client, data.userId, data.dealId);
+      this.dealManagerService.touch(data.dealId);
 
       SocketResponseHelper.sendSuccessResponse(client, {
         message: 'Реакция успешно зарегистрирована',
         data: { dealId: data.dealId },
+      });
+    } catch (e) {
+      SocketResponseHelper.sendErrorResponse(client, e);
+    }
+  }
+
+  @SubscribeMessage('deal.start')
+  async handleStartDeal(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: DealIdPayload,
+  ) {
+    await ValidatorHelper.validateDto(DealIdPayload, payload);
+    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
+      this.dealService.startDealFlow(dealId, userId),
+    );
+  }
+
+  @SubscribeMessage('deal.buyerConfirmPayment')
+  async handleBuyerPayment(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: DealIdPayload,
+  ) {
+    await ValidatorHelper.validateDto(DealIdPayload, payload);
+    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
+      this.dealService.buyerConfirmPayment(dealId, userId),
+    );
+  }
+
+  @SubscribeMessage('deal.sellerConfirmDelivery')
+  async handleSellerDelivery(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: DealIdPayload,
+  ) {
+    await ValidatorHelper.validateDto(DealIdPayload, payload);
+    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
+      this.dealService.sellerConfirmDelivery(dealId, userId),
+    );
+  }
+
+  @SubscribeMessage('deal.buyerConfirmAcceptance')
+  async handleBuyerAcceptance(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: DealIdPayload,
+  ) {
+    await ValidatorHelper.validateDto(DealIdPayload, payload);
+    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
+      this.dealService.buyerConfirmAcceptance(dealId, userId),
+    );
+  }
+
+  @SubscribeMessage('deal.close')
+  async handleCloseDeal(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: DealIdPayload,
+  ) {
+    await ValidatorHelper.validateDto(DealIdPayload, payload);
+    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
+      this.dealService.closeDeal(dealId, userId),
+    );
+  }
+
+  @SubscribeMessage('deal.cancel')
+  async handleCancelDeal(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: DealIdPayload,
+  ) {
+    await ValidatorHelper.validateDto(DealIdPayload, payload);
+    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
+      this.dealService.cancelDeal(dealId, userId),
+    );
+  }
+
+  @SubscribeMessage('deal.dispute')
+  async handleDispute(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: DealDisputePayload,
+  ) {
+    await ValidatorHelper.validateDto(DealDisputePayload, payload);
+    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
+      this.dealService.openDispute(dealId, userId, payload.reason),
+    );
+  }
+
+  @SubscribeMessage('deal.counterOffer')
+  async handleCounterOffer(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: DealCounterOfferPayload,
+  ) {
+    await ValidatorHelper.validateDto(DealCounterOfferPayload, payload);
+    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
+      this.dealService.createCounterOffer(
+        dealId,
+        userId,
+        payload.price,
+        payload.message,
+      ),
+    );
+  }
+
+  @SubscribeMessage('deal.counterOfferRespond')
+  async handleCounterOfferRespond(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: DealCounterOfferRespondPayload,
+  ) {
+    await ValidatorHelper.validateDto(DealCounterOfferRespondPayload, payload);
+    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
+      this.dealService.respondCounterOffer(
+        dealId,
+        userId,
+        payload.counterOfferId,
+        payload.accept,
+      ),
+    );
+  }
+
+  private async executeDealAction(
+    client: Socket,
+    dealId: string,
+    action: (dealId: string, actorId: string) => Promise<DealDocument>,
+  ) {
+    try {
+      const actorId = this.getUserId(client);
+      const deal = await action(dealId, actorId);
+      this.dealManagerService.touch(dealId);
+      SocketResponseHelper.sendSuccessResponse(client, {
+        message: 'Действие выполнено',
+        data: { dealId, deal },
       });
     } catch (e) {
       SocketResponseHelper.sendErrorResponse(client, e);

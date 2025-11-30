@@ -9,6 +9,7 @@ import {
   IDealRepositoryToken,
   IDealValidationServiceToken,
   IMessagesServiceToken,
+  INotificationServiceToken,
 } from '../../core/constants';
 import {
   DealMessageLog,
@@ -16,6 +17,7 @@ import {
 } from '../../core/schemas/deal-message-log.schema';
 import { Deal, DealSchema } from '../../core/schemas/deal.schema';
 import { UserModule } from '../users/user.module';
+import { DealController } from './controllers/deal.controller';
 import { DealGateway } from './gateway/deal.gateway';
 import { DealEventsListener } from './listeners/deal-events.listeners';
 import { DealProcessor } from './processors/deal.processor';
@@ -25,6 +27,7 @@ import { DealValidationService } from './services/deal-validation.service';
 import { DealService } from './services/deal.service';
 import { DealMemoryManagerService } from './services/management/deal-memory.management.service';
 import { MessagesService } from './services/messages.service';
+import { DealNotificationService } from './services/deal-notification.service';
 import { QueueProcessorDeal } from './types';
 
 @Module({
@@ -65,7 +68,12 @@ import { QueueProcessorDeal } from './types';
       provide: IDealMemoryManagerServiceToken,
       useClass: DealMemoryManagerService,
     },
+    {
+      provide: INotificationServiceToken,
+      useClass: DealNotificationService,
+    },
   ],
   exports: [DealService],
+  controllers: [DealController],
 })
 export class DealModule {}

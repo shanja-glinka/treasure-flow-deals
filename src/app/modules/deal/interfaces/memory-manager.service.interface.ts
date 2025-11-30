@@ -1,6 +1,13 @@
 import { DealDocument } from '@root/src/app/core/schemas/deal.schema';
 import { Types } from 'mongoose';
 
+export interface DealMemoryEntry {
+  deal: DealDocument;
+  changed: boolean;
+  lastActivityAt: number;
+  onlineUserIds: string[];
+}
+
 export interface IDealMemoryManagerService {
   /**
    * Возвращает аукцион из памяти или, если он отсутствует, загружает его из БД.
@@ -25,7 +32,7 @@ export interface IDealMemoryManagerService {
    *
    * @param {DealDocument} deal - Объект аукциона для сохранения.
    */
-  set(deal: DealDocument): void;
+  set(deal: DealDocument, markChanged?: boolean): void;
 
   /**
    * Помечает аукцион как изменённый, чтобы позже сохранить его в БД.
@@ -56,6 +63,8 @@ export interface IDealMemoryManagerService {
    */
   resetAllChangedFlags(): void;
 
+  markSynced(dealId: string | Types.ObjectId): void;
+
   /**
    * Возвращает все аукционы, находящиеся в памяти, независимо от их статуса (изменены или нет).
    *
@@ -75,4 +84,20 @@ export interface IDealMemoryManagerService {
    * @param {string | Types.ObjectId} dealId - Уникальный идентификатор аукциона.
    */
   remove(dealId: string | Types.ObjectId): void;
+
+  touch(dealId: string | Types.ObjectId): void;
+
+  registerOnline(
+    dealId: string | Types.ObjectId,
+    userId: string | Types.ObjectId,
+  ): void;
+
+  unregisterOnline(
+    dealId: string | Types.ObjectId,
+    userId: string | Types.ObjectId,
+  ): void;
+
+  getOnlineParticipants(dealId: string | Types.ObjectId): string[];
+
+  getStaleEntries(maxIdleMs: number): DealMemoryEntry[];
 }

@@ -1,5 +1,7 @@
 import { FilterQuery, Types } from 'mongoose';
 import { Deal, DealDocument } from '../../../core/schemas/deal.schema';
+import { FindDealDTO } from '../dto/get-deal.dto';
+import { IPaginationResult } from '@root/src/app/core/common/filters/search/interfaces/pagination.interface';
 
 export interface IDealRepository {
   /**
@@ -58,4 +60,14 @@ export interface IDealRepository {
    * Получает список аукционов, которые должны быть завершены.
    */
   getDealsToFinish(): Promise<DealDocument[]>;
+
+  searchUserDeals(
+    match: FilterQuery<DealDocument>,
+    dto: FindDealDTO,
+  ): Promise<IPaginationResult<DealDocument>>;
+
+  countUserDeals(
+    match: FilterQuery<DealDocument>,
+    dto?: FindDealDTO,
+  ): Promise<number>;
 }

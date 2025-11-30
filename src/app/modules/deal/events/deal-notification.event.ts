@@ -16,7 +16,7 @@ export enum NotificationType {
 export class DealRoomNotificationEvent {
   roomId: string | Types.ObjectId;
   type: NotificationType;
-  auction: DealDocument;
+  deal: DealDocument;
 }
 
 export class DealMessageNotificationEvent {
