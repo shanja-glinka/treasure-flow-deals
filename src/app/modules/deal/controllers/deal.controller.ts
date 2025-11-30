@@ -52,8 +52,7 @@ export class DealController {
     @Body() dto: FindDealDTO,
   ) {
     const actorId = this.ensureUser(user);
-    const data = await this.dealService.getUserDeals(actorId, dto);
-    return new SuccessResponseDto(data.items, data.meta);
+    return this.dealService.getUserDeals(actorId, dto);
   }
 
   /**
@@ -75,7 +74,7 @@ export class DealController {
     const dto = new FindDealDTO();
     dto.viewAs = this.resolveViewAs(viewAs);
     const count = await this.dealService.countUserDeals(actorId, dto);
-    return new SuccessResponseDto({ count });
+    return { count };
   }
 
   @Post('/:dealId/start')
