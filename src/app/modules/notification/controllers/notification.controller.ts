@@ -46,53 +46,5 @@ export class NotificationController {
         'You are not authorized to create a notification',
       );
     }
-
-    // const auction = {
-    //   _id: user['_id'],
-    //   title: 'Test Auction',
-    //   seller: user['_id'],
-    //   bids: [],
-    //   messages: [],
-    //   views: 0,
-    //   interestViews: 0,
-    //   interestBids: 0,
-    //   createdAt: new Date(),
-    //   updatedAt: new Date(),
-    //   status: AuctionTypeEnum.ACTIVE,
-    //   startAt: new Date(),
-    //   endAt: new Date(),
-    //   startedAt: new Date(),
-    //   endedAt: new Date(),
-    //   winner: user['_id'],
-    //   attributes: [],
-    // } as any;
-
-    // try {
-    //   switch (body.action) {
-    //     case 'auctionStarted':
-    //       return this.notificationService.auctionStarted({
-    //         roomId: '123',
-    //         type: NotificationType.AUCTION_STARTED,
-    //         auction,
-    //       });
-    //     case 'auctionBidWinned':
-    //       return this.notificationService.auctionBidWinned({
-    //         roomId: '123',
-    //         type: NotificationType.BID_WINNED,
-    //         newBid: auction.bids.at(-1),
-    //         userId: user['_id'].toString(),
-    //         dealId: user['_id'].toString(),
-    //       });
-    //     case 'auctionFinished':
-    //       return this.notificationService.auctionFinished({
-    //         roomId: '123',
-    //         type: NotificationType.AUCTION_FINISHED,
-    //         auction,
-    //       });
-    //   }
-    // } catch (error) {
-    //   console.error(error);
-    //   throw new BadRequestException(error.message);
-    // }
   }
 }
