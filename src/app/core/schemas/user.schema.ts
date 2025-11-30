@@ -12,6 +12,7 @@ export class UserShortData {
   _id: Types.ObjectId;
   username: string;
   email: string;
+  imageId?: string | null;
 }
 
 export class User {

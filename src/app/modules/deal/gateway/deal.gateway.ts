@@ -462,6 +462,7 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
       _id: user._id,
       username: user.username,
       email: user.email,
+      imageId: user.imageId,
     };
   }
 
