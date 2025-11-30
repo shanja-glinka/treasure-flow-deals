@@ -254,6 +254,9 @@ export class DealRepository implements IDealRepository {
     if (status) {
       query.status = status;
     }
+    if (dto?.modifier?.byAuction) {
+      query.auction = ValidatorHelper.validateObjectId(dto.modifier.byAuction);
+    }
     return query;
   }
 

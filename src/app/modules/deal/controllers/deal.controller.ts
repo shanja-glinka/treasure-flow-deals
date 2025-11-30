@@ -21,7 +21,7 @@ import {
   DealCounterOfferResponseDto,
   DealDisputeDto,
 } from '../dto/deal-action.dto';
-import { DealViewAs, FindDealDTO } from '../dto/get-deal.dto';
+import { DealModifierDTO, DealViewAs, FindDealDTO } from '../dto/get-deal.dto';
 import { DealService } from '../services/deal.service';
 
 @ApiTags('Deal')
@@ -72,7 +72,12 @@ export class DealController {
   ) {
     const actorId = this.ensureUser(user);
     const dto = new FindDealDTO();
-    dto.viewAs = this.resolveViewAs(viewAs);
+    if (!dto?.modifier) {
+      dto.modifier = new DealModifierDTO();
+    }
+
+    dto.modifier.viewAs = this.resolveViewAs(viewAs);
+
     const count = await this.dealService.countUserDeals(actorId, dto);
     return { count };
   }

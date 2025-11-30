@@ -2,7 +2,8 @@ import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { BaseFindDTO } from '@root/src/app/core/common/filters/dto/find.dto';
 import { DealStatusEnum } from '@root/src/app/core/schemas/deal.schema';
 import { Type } from 'class-transformer';
-import { IsEnum, IsOptional, ValidateNested } from 'class-validator';
+import { IsEnum, IsMongoId, IsOptional, ValidateNested } from 'class-validator';
+import { Types } from 'mongoose';
 
 export enum DealViewAs {
   SELLER = 'seller',
@@ -19,7 +20,16 @@ export class FilterDealDTO {
   @IsEnum(DealStatusEnum)
   status?: DealStatusEnum;
 }
-export class FindDealDTO extends BaseFindDTO<FilterDealDTO> {
+
+export class DealModifierDTO {
+  @ApiPropertyOptional({
+    description: 'Фильтр по идентификатору аукциона.',
+    type: String,
+  })
+  @IsOptional()
+  @IsMongoId()
+  byAuction?: Types.ObjectId;
+
   @ApiProperty({
     description: 'От чьего имени смотреть сделки: seller или buyer',
     enum: DealViewAs,
@@ -27,7 +37,9 @@ export class FindDealDTO extends BaseFindDTO<FilterDealDTO> {
   })
   @IsEnum(DealViewAs)
   viewAs: DealViewAs = DealViewAs.SELLER;
+}
 
+export class FindDealDTO extends BaseFindDTO<FilterDealDTO> {
   @ApiPropertyOptional({
     description: 'Фильтры для поиска сделок.',
   })
@@ -35,4 +47,12 @@ export class FindDealDTO extends BaseFindDTO<FilterDealDTO> {
   @ValidateNested()
   @Type(() => FilterDealDTO)
   filter?: FilterDealDTO;
+
+  @ApiPropertyOptional({
+    description: 'Модификаторы поиска сделки.',
+  })
+  @ValidateNested()
+  @IsOptional()
+  @Type(() => DealModifierDTO)
+  modifier?: DealModifierDTO;
 }

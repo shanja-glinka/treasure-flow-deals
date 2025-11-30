@@ -258,7 +258,7 @@ export class DealService {
     userId: string,
     dto: FindDealDTO,
   ): Promise<IPaginationResult<DealDocument>> {
-    const viewAs = dto.viewAs ?? DealViewAs.SELLER;
+    const viewAs = dto.modifier?.viewAs ?? DealViewAs.SELLER;
     const match = this.buildParticipantMatch(userId, viewAs);
     return this.dealRepository.searchUserDeals(match, dto);
   }
@@ -267,7 +267,7 @@ export class DealService {
     userId: string,
     dto: FindDealDTO,
   ): Promise<number> {
-    const viewAs = dto.viewAs ?? DealViewAs.SELLER;
+    const viewAs = dto.modifier?.viewAs ?? DealViewAs.SELLER;
     const match = this.buildParticipantMatch(userId, viewAs);
     return this.dealRepository.countUserDeals(match, dto);
   }
