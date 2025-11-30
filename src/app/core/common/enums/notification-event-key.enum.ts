@@ -1,0 +1,16 @@
+export enum NotificationEventKey {
+  AUCTION_STARTED = 'auction.started',
+  AUCTION_ENDED = 'auction.ended',
+  AUCTION_CREATED = 'auction.created',
+  AUCTION_CHANGED = 'auction.changed',
+  AUCTION_SCHEDULE_UPDATED = 'auction.schedule.updated',
+  AUCTION_BID_OVERRIDDEN = 'auction.bid.overridden',
+  AUCTION_BID_WINNED = 'auction.bid.winned',
+  SUBSCRIPTION_NOTIFICATIONS_CHANNEL_IN_APP_SEND = 'subscription.notifications.channel.in_app.send',
+  SUBSCRIPTION_NOTIFICATIONS_CHANNEL_EMAIL_SEND = 'subscription.notifications.channel.email.send',
+  SUBSCRIPTION_NOTIFICATIONS_SETTINGS_UPDATE = 'subscription.notifications.settings.update',
+  SUBSCRIPTION_QUOTA_OVERRIDE = 'subscription.quota.override',
+  COIN_LISTED = 'coin.listed',
+  COIN_UPDATED = 'coin.updated',
+  SEARCH_MATCH = 'search.match',
+}
