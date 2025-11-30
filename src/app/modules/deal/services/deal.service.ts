@@ -559,23 +559,28 @@ export class DealService {
   }
 
   private ensureSeller(deal: DealDocument, actorId: string) {
-    if (!this.toObjectId(actorId).equals(deal.seller)) {
+    const sellerId = this.extractObjectId(deal.seller);
+    if (!sellerId || !this.toObjectId(actorId).equals(sellerId)) {
       throw new ForbiddenException('Требуется продавец');
     }
   }
 
   private ensureBuyer(deal: DealDocument, actorId: string) {
-    if (!deal.buyer || !this.toObjectId(actorId).equals(deal.buyer)) {
+    const buyerId = this.extractObjectId(deal.buyer);
+    if (!buyerId || !this.toObjectId(actorId).equals(buyerId)) {
       throw new ForbiddenException('Требуется покупатель');
     }
   }
 
   private ensureParticipant(deal: DealDocument, actorId: string) {
     const actorObjectId = this.toObjectId(actorId);
-    if (
-      !actorObjectId.equals(deal.seller) &&
-      (!deal.buyer || !actorObjectId.equals(deal.buyer))
-    ) {
+    const sellerId = this.extractObjectId(deal.seller);
+    const buyerId = this.extractObjectId(deal.buyer);
+
+    const isSeller = sellerId ? actorObjectId.equals(sellerId) : false;
+    const isBuyer = buyerId ? actorObjectId.equals(buyerId) : false;
+
+    if (!isSeller && !isBuyer) {
       throw new ForbiddenException('Недостаточно прав');
     }
   }

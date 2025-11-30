@@ -102,12 +102,6 @@ export function WithClientContext() {
   };
 }
 
-@WebSocketGateway({
-  namespace: '/deal',
-  cors: {
-    origin: '*',
-  },
-})
 class DealIdPayload {
   @IsMongoId()
   dealId: string;
@@ -131,6 +125,12 @@ class DealCounterOfferRespondPayload extends DealCounterOfferResponseDto {
   counterOfferId: string;
 }
 
+@WebSocketGateway({
+  namespace: '/deal',
+  cors: {
+    origin: '*',
+  },
+})
 export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   public server: Server;
@@ -511,12 +511,12 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.refreshUserActivity(client, data.userId, data.dealId);
       this.dealManagerService.touch(data.dealId);
 
-      SocketResponseHelper.sendSuccessResponse(client, {
+      return SocketResponseHelper.sendSuccessResponse(client, {
         message: 'Сообщение успешно зарегистрировано',
         data: { dealId: data.dealId },
       });
     } catch (e) {
-      SocketResponseHelper.sendErrorResponse(client, e);
+      return SocketResponseHelper.sendErrorResponse(client, e);
     }
   }
 
@@ -536,12 +536,12 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.refreshUserActivity(client, data.userId, data.dealId);
       this.dealManagerService.touch(data.dealId);
 
-      SocketResponseHelper.sendSuccessResponse(client, {
+      return SocketResponseHelper.sendSuccessResponse(client, {
         message: 'Реакция успешно зарегистрирована',
         data: { dealId: data.dealId },
       });
     } catch (e) {
-      SocketResponseHelper.sendErrorResponse(client, e);
+      return SocketResponseHelper.sendErrorResponse(client, e);
     }
   }
 
@@ -550,9 +550,15 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: DealIdPayload,
   ) {
-    await ValidatorHelper.validateDto(DealIdPayload, payload);
-    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
-      this.dealService.startDealFlow(dealId, userId),
+    try {
+      await ValidatorHelper.validateDto(DealIdPayload, payload);
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+    return await this.executeDealAction(
+      client,
+      payload.dealId,
+      (dealId, userId) => this.dealService.startDealFlow(dealId, userId),
     );
   }
 
@@ -561,9 +567,15 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: DealIdPayload,
   ) {
-    await ValidatorHelper.validateDto(DealIdPayload, payload);
-    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
-      this.dealService.buyerConfirmPayment(dealId, userId),
+    try {
+      await ValidatorHelper.validateDto(DealIdPayload, payload);
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+    return await this.executeDealAction(
+      client,
+      payload.dealId,
+      (dealId, userId) => this.dealService.buyerConfirmPayment(dealId, userId),
     );
   }
 
@@ -572,9 +584,16 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: DealIdPayload,
   ) {
-    await ValidatorHelper.validateDto(DealIdPayload, payload);
-    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
-      this.dealService.sellerConfirmDelivery(dealId, userId),
+    try {
+      await ValidatorHelper.validateDto(DealIdPayload, payload);
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+    return await this.executeDealAction(
+      client,
+      payload.dealId,
+      (dealId, userId) =>
+        this.dealService.sellerConfirmDelivery(dealId, userId),
     );
   }
 
@@ -583,9 +602,16 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: DealIdPayload,
   ) {
-    await ValidatorHelper.validateDto(DealIdPayload, payload);
-    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
-      this.dealService.buyerConfirmAcceptance(dealId, userId),
+    try {
+      await ValidatorHelper.validateDto(DealIdPayload, payload);
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+    return await this.executeDealAction(
+      client,
+      payload.dealId,
+      (dealId, userId) =>
+        this.dealService.buyerConfirmAcceptance(dealId, userId),
     );
   }
 
@@ -594,9 +620,15 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: DealIdPayload,
   ) {
-    await ValidatorHelper.validateDto(DealIdPayload, payload);
-    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
-      this.dealService.closeDeal(dealId, userId),
+    try {
+      await ValidatorHelper.validateDto(DealIdPayload, payload);
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+    return await this.executeDealAction(
+      client,
+      payload.dealId,
+      (dealId, userId) => this.dealService.closeDeal(dealId, userId),
     );
   }
 
@@ -605,10 +637,19 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: DealIdPayload,
   ) {
-    await ValidatorHelper.validateDto(DealIdPayload, payload);
-    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
-      this.dealService.cancelDeal(dealId, userId),
+    try {
+      await ValidatorHelper.validateDto(DealIdPayload, payload);
+    } catch (e) {
+      // console.log('handleCancelDeal error', e);
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+    const result = await this.executeDealAction(
+      client,
+      payload.dealId,
+      (dealId, userId) => this.dealService.cancelDeal(dealId, userId),
     );
+
+    return result;
   }
 
   @SubscribeMessage('deal.dispute')
@@ -616,9 +657,16 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: DealDisputePayload,
   ) {
-    await ValidatorHelper.validateDto(DealDisputePayload, payload);
-    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
-      this.dealService.openDispute(dealId, userId, payload.reason),
+    try {
+      await ValidatorHelper.validateDto(DealDisputePayload, payload);
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+    return await this.executeDealAction(
+      client,
+      payload.dealId,
+      (dealId, userId) =>
+        this.dealService.openDispute(dealId, userId, payload.reason),
     );
   }
 
@@ -627,14 +675,22 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: DealCounterOfferPayload,
   ) {
-    await ValidatorHelper.validateDto(DealCounterOfferPayload, payload);
-    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
-      this.dealService.createCounterOffer(
-        dealId,
-        userId,
-        payload.price,
-        payload.message,
-      ),
+    try {
+      await ValidatorHelper.validateDto(DealCounterOfferPayload, payload);
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+
+    return await this.executeDealAction(
+      client,
+      payload.dealId,
+      (dealId, userId) =>
+        this.dealService.createCounterOffer(
+          dealId,
+          userId,
+          payload.price,
+          payload.message,
+        ),
     );
   }
 
@@ -643,14 +699,25 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: DealCounterOfferRespondPayload,
   ) {
-    await ValidatorHelper.validateDto(DealCounterOfferRespondPayload, payload);
-    await this.executeDealAction(client, payload.dealId, (dealId, userId) =>
-      this.dealService.respondCounterOffer(
-        dealId,
-        userId,
-        payload.counterOfferId,
-        payload.accept,
-      ),
+    try {
+      await ValidatorHelper.validateDto(
+        DealCounterOfferRespondPayload,
+        payload,
+      );
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+
+    return await this.executeDealAction(
+      client,
+      payload.dealId,
+      (dealId, userId) =>
+        this.dealService.respondCounterOffer(
+          dealId,
+          userId,
+          payload.counterOfferId,
+          payload.accept,
+        ),
     );
   }
 
@@ -659,16 +726,15 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     dealId: string,
     action: (dealId: string, actorId: string) => Promise<DealDocument>,
   ) {
+    const actorId = this.getUserId(client);
     try {
-      const actorId = this.getUserId(client);
       const deal = await action(dealId, actorId);
+
       this.dealManagerService.touch(dealId);
-      SocketResponseHelper.sendSuccessResponse(client, {
-        message: 'Действие выполнено',
-        data: { dealId, deal },
-      });
+
+      return SocketResponseHelper.sendSuccessResponse(client, deal);
     } catch (e) {
-      SocketResponseHelper.sendErrorResponse(client, e);
+      return SocketResponseHelper.sendErrorResponse(client, e);
     }
   }
 }

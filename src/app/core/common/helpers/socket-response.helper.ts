@@ -4,30 +4,22 @@ import { SuccessResponseDto } from '../interceptors/response.interceptor';
 import { HttpException } from '@nestjs/common';
 
 export class SocketResponseHelper {
-  static sendSuccessResponse<T>(
-    client: Socket,
-    data: T,
-    event?: string,
-  ): SuccessResponseDto<T> {
-    const response = new SuccessResponseDto<T>(
-      typeof data === 'object' && 'data' in data ? (data.data as T) : data,
-    );
-    if (event) client.emit(event, response);
+  static sendSuccessResponse<T>(client: Socket, data: T, event?: string): any {
+    const response = new SuccessResponseDto<T>(data);
 
+    if (event) {
+      client.emit(event, response);
+    }
     return response;
   }
 
-  static sendErrorResponse(
-    client: Socket,
-    error: any,
-    event?: string,
-  ): ErrorResponseDto {
-    // console.error(error);
-    const statusCode = error instanceof HttpException ? error.getStatus() : 500;
+  static sendErrorResponse(client: Socket, error: any, event?: string): any {
+    const statusCode =
+      error instanceof HttpException ? (error?.getStatus?.() ?? 500) : 500;
     let errors = [];
 
     const message =
-      error instanceof HttpException ? error.message : 'Internal server error';
+      error instanceof Error ? error.message : 'Internal server error';
 
     if (
       error instanceof HttpException &&
@@ -42,8 +34,10 @@ export class SocketResponseHelper {
     }
 
     const response = new ErrorResponseDto(statusCode, message, errors);
-    if (event) client.emit(event, response);
 
+    if (event) {
+      // client.emit(event, response);
+    }
     return response;
   }
 }

@@ -16,6 +16,15 @@ import {
   DealMessageLogSchema,
 } from '../../core/schemas/deal-message-log.schema';
 import { Deal, DealSchema } from '../../core/schemas/deal.schema';
+import {
+  UserCoinItem,
+  UserCoinItemSchema,
+} from '../../core/schemas/user-coin-item.schema';
+import {
+  UserCoinItemLog,
+  UserCoinItemLogSchema,
+} from '../../core/schemas/user-coin-item-log.schema';
+import { Coin, CoinSchema } from '../../core/schemas/coin.schema';
 import { UserModule } from '../users/user.module';
 import { DealController } from './controllers/deal.controller';
 import { DealGateway } from './gateway/deal.gateway';
@@ -36,6 +45,9 @@ import { DealViewBuilder } from './services/deal-view.builder';
     MongooseModule.forFeature([
       { name: Deal.name, schema: DealSchema },
       { name: DealMessageLog.name, schema: DealMessageLogSchema },
+      { name: UserCoinItem.name, schema: UserCoinItemSchema },
+      { name: UserCoinItemLog.name, schema: UserCoinItemLogSchema },
+      { name: Coin.name, schema: CoinSchema },
     ]),
     ScheduleModule.forRoot(),
     UserModule,

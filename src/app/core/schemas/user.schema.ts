@@ -26,6 +26,7 @@ export class User {
   password: string;
   emailVerifiedAt: Date | null;
   roles: Role[];
+  imageId?: string | null;
   coinLogs: Types.ObjectId[];
 }
 
@@ -37,6 +38,7 @@ export const UserSchema = new Schema(
     updatedAt: { type: Date },
     name: { type: String },
     surname: { type: String },
+    imageId: { type: String },
     email: { type: String },
     password: { type: String },
     emailVerifiedAt: { type: Date },

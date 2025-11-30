@@ -110,9 +110,9 @@ export class DealViewBuilder {
     return user
       ? this.normalizeShortData({
           _id: user._id,
-          username: (user as any).username ?? user.name ?? user.email,
+          username: `${user?.name} ${user?.surname}`.trim() ?? user.email,
           email: user.email,
-          imageId: (user as any).imageId ?? null,
+          imageId: user?.imageId ?? null,
           roles: user.roles ?? [],
         })
       : null;
