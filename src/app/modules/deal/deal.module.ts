@@ -1,26 +1,31 @@
+import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ScheduleModule } from '@nestjs/schedule';
+import { redisConfiguration } from '@root/src/config/redis.config';
 import {
+  IDealMemoryManagerServiceToken,
   IDealRepositoryToken,
   IDealValidationServiceToken,
   IMessagesServiceToken,
-  IDealMemoryManagerServiceToken,
 } from '../../core/constants';
-import { Deal, DealSchema } from '../../core/schemas/deal.schema';
-import { UserModule } from '../users/user.module';
-import { DealEventsListener } from './listeners/deal-events.listeners';
-import { DealGateway } from './gateway/deal.gateway';
-import { DealService } from './services/deal.service';
-import { DealRepository } from './repositories/deal.repository';
-import { DealValidationService } from './services/deal-validation.service';
 import {
   DealMessageLog,
   DealMessageLogSchema,
 } from '../../core/schemas/deal-message-log.schema';
+import { Deal, DealSchema } from '../../core/schemas/deal.schema';
+import { UserModule } from '../users/user.module';
+import { DealGateway } from './gateway/deal.gateway';
+import { DealEventsListener } from './listeners/deal-events.listeners';
+import { DealProcessor } from './processors/deal.processor';
+import { DealRepository } from './repositories/deal.repository';
 import { DealScheduler } from './scheduler/deal.scheduler';
-import { MessagesService } from './services/messages.service';
+import { DealValidationService } from './services/deal-validation.service';
+import { DealService } from './services/deal.service';
 import { DealMemoryManagerService } from './services/management/deal-memory.management.service';
+import { MessagesService } from './services/messages.service';
+import { QueueProcessorDeal } from './types';
 
 @Module({
   imports: [
@@ -30,12 +35,20 @@ import { DealMemoryManagerService } from './services/management/deal-memory.mana
     ]),
     ScheduleModule.forRoot(),
     UserModule,
+    BullModule.registerQueueAsync({
+      name: QueueProcessorDeal,
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) =>
+        redisConfiguration(configService),
+      inject: [ConfigService],
+    }),
   ],
   providers: [
     DealEventsListener,
     DealGateway,
     DealService,
     DealScheduler,
+    DealProcessor,
     {
       provide: IDealRepositoryToken,
       useClass: DealRepository,

@@ -60,6 +60,7 @@ export const EventDealMessageRemoved = Symbol('deal.message.removed');
 export const EventDealReactionAdded = Symbol('deal.reaction.added');
 export const EventDealReactionRemoved = Symbol('deal.reaction.removed');
 export const EventDealFinished = Symbol('deal.finished');
+export const EventDealCreated = Symbol('deal.created');
 
 export const SocketEventBidOverridden = 'bidOverridden';
 export const SocketEventBidWinned = 'bidWinned';

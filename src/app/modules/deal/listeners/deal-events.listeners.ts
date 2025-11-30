@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   EventDealChanged,
+  EventDealCreated,
   EventDealFinished,
   EventDealMessageAdded,
   EventDealMessageRemoved,
@@ -10,6 +11,7 @@ import {
   IDealRepositoryToken,
   SocketEventDealFinished,
 } from '@root/src/app/core/constants';
+import { DealDocument } from '@root/src/app/core/schemas/deal.schema';
 import {
   DealMessageNotificationEvent,
   DealRoomNotificationEvent,
@@ -68,5 +70,10 @@ export class DealEventsListener {
         e as any,
       );
     }
+  }
+
+  @OnEvent(EventDealCreated, { async: true })
+  async handleDealCreated(deal: DealDocument) {
+    this.logger.log(`Deal created: ${deal._id}`);
   }
 }

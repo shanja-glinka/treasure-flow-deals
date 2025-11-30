@@ -7,17 +7,15 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   EntityNotFoundMessage,
+  EventDealCreated,
   EventDealFinished,
   IDealRepositoryToken,
 } from '@root/src/app/core/constants';
 import { ValidatorHelper } from '@root/src/app/core/helpers';
-import {
-  Auction,
-  AuctionTypeEnum,
-} from '@root/src/app/core/schemas/auction.schema';
 import { Types } from 'mongoose';
 import { Deal, DealTypeEnum } from '../../../core/schemas/deal.schema';
 import { IDealRepository } from '../interfaces/deal.repository.interface';
+import { CreateDealRequestDto } from '../types';
 
 @Injectable()
 export class DealService {
@@ -129,68 +127,40 @@ export class DealService {
    * @param {Types.ObjectId} coinId - ID монеты
    * @returns {Promise<any>} Созданная сделка
    */
-  public async createDeal(
-    auction: Auction,
-    conditionId: Types.ObjectId,
-    coinId: Types.ObjectId,
-  ): Promise<any> {
-    // Проверка, что аукцион завершен
-    if (auction.status !== AuctionTypeEnum.ENDED) {
-      throw new BadRequestException(
-        'Нельзя создать сделку для незавершенного аукциона',
-      );
-    }
-
+  public async createDeal(data: CreateDealRequestDto): Promise<any> {
     // Проверка на дублирование по аукциону
     const exists = await this.dealRepository.findBy(
-      { auction: auction._id },
+      { auction: ValidatorHelper.validateObjectId(data.auction) },
       true,
     );
     if (exists) {
       return await this.dealRepository.findOneBy(
-        { auction: auction._id },
+        { auction: ValidatorHelper.validateObjectId(data.auction) },
         true,
         false,
       );
     }
 
-    // Безопасно извлекаем seller ObjectId
-    const rawSeller: any =
-      typeof auction.seller === 'object' &&
-      auction.seller &&
-      '_id' in auction.seller
-        ? (auction.seller as any)._id
-        : auction.seller;
-    const sellerId = ValidatorHelper.validateObjectId(rawSeller);
-
-    // Создаем объект данных для сделки
     const dealData: Partial<Deal> = {
-      item: auction.item,
-      coin: coinId,
-      seller: sellerId,
-      auction: auction._id,
-      buyer: auction.winner,
+      ...data,
+      item: ValidatorHelper.validateObjectId(data.item),
+      coin: ValidatorHelper.validateObjectId(data.coin),
+      seller: ValidatorHelper.validateObjectId(data.seller),
+      auction: ValidatorHelper.validateObjectId(data.auction),
+      buyer:
+        data.buyer !== null
+          ? ValidatorHelper.validateObjectId(data.buyer)
+          : null,
+      condition: ValidatorHelper.validateObjectId(data.condition),
       status: DealTypeEnum.ACTIVE,
-      startingPrice: auction.startingPrice,
-      finalPrice: auction.currentPrice,
-      condition: conditionId,
-      // Планируем закрытие сделки через 7 дней от момента создания
-      endedAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      auctionStats: {
-        totalBids: auction.bids.length,
-        highestBid: auction.currentPrice || auction.startingPrice,
-        auctionDuration:
-          auction.endedAt && auction.startedAt
-            ? auction.endedAt.getTime() - auction.startedAt.getTime()
-            : 0,
-      },
+      endedAt: new Date(data.endedAt),
     };
 
     // Создаем и сохраняем сделку через репозиторий, используя метод create
     const deal = await this.dealRepository.create(dealData);
 
     // Генерируем событие о создании сделки
-    this.eventEmitter.emit('deal.created', deal);
+    this.eventEmitter.emit(EventDealCreated, deal);
 
     return deal;
   }
