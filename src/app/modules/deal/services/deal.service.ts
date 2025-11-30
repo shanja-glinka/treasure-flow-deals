@@ -35,6 +35,12 @@ import {
 } from '../events/deal-notification.event';
 import { DealViewBuilder } from './deal-view.builder';
 
+export enum DealDisputeResolutionDecision {
+  RELEASE = 'release',
+  REFUND = 'refund',
+  CUSTOM = 'custom',
+}
+
 @Injectable()
 export class DealService {
   constructor(
@@ -276,6 +282,113 @@ export class DealService {
     return this.dealRepository.countUserDeals(match, dto);
   }
 
+  public async requestGuaranteeUpgrade(
+    dealId: string,
+    actorId: string,
+  ): Promise<DealDocument> {
+    const deal = await this.getDealOrThrow(dealId);
+    const sellerId = this.extractObjectId(deal.seller);
+    const buyerId = this.extractObjectId(deal.buyer);
+    const actorObjectId = this.toObjectId(actorId);
+    const isSeller = !!sellerId && actorObjectId.equals(sellerId);
+    const isBuyer = !!buyerId && actorObjectId.equals(buyerId);
+
+    if (!isSeller && !isBuyer) {
+      throw new ForbiddenException('Недостаточно прав для изменения сделки');
+    }
+
+    if (deal.guarantee?.enabled) {
+      throw new BadRequestException('Сделка уже является гарантийной');
+    }
+
+    if (deal.status === DealStatusEnum.GUARANTEE_PENDING) {
+      throw new BadRequestException('Запрос на гарант уже отправлен');
+    }
+
+    deal.guarantee = deal.guarantee ?? ({} as any);
+    deal.guarantee.enabled = false;
+    deal.guarantee.initiatedBy = actorObjectId;
+    deal.guarantee.sellerApproved = isSeller;
+    deal.guarantee.sellerApprovedAt = isSeller ? new Date() : null;
+    deal.guarantee.buyerApproved = isBuyer;
+    deal.guarantee.buyerApprovedAt = isBuyer ? new Date() : null;
+
+    deal.status = DealStatusEnum.GUARANTEE_PENDING;
+    this.appendTimeline(deal, 'guarantee.requested', actorId, {
+      by: isSeller ? 'seller' : 'buyer',
+    });
+    this.persistDeal(deal);
+    return deal;
+  }
+
+  public async respondGuaranteeUpgrade(
+    dealId: string,
+    actorId: string,
+    accept: boolean,
+  ): Promise<DealDocument> {
+    const deal = await this.getDealOrThrow(dealId);
+    const sellerId = this.extractObjectId(deal.seller);
+    const buyerId = this.extractObjectId(deal.buyer);
+    const actorObjectId = this.toObjectId(actorId);
+    const isSeller = !!sellerId && actorObjectId.equals(sellerId);
+    const isBuyer = !!buyerId && actorObjectId.equals(buyerId);
+
+    if (!isSeller && !isBuyer) {
+      throw new ForbiddenException('Недостаточно прав');
+    }
+
+    if (deal.status !== DealStatusEnum.GUARANTEE_PENDING) {
+      throw new BadRequestException('Сделка не ожидает подтверждения гаранта');
+    }
+
+    deal.guarantee = deal.guarantee ?? ({} as any);
+
+    if (accept) {
+      if (isSeller && deal.guarantee.sellerApproved) {
+        return deal;
+      }
+      if (isBuyer && deal.guarantee.buyerApproved) {
+        return deal;
+      }
+
+      if (isSeller) {
+        deal.guarantee.sellerApproved = true;
+        deal.guarantee.sellerApprovedAt = new Date();
+      } else {
+        deal.guarantee.buyerApproved = true;
+        deal.guarantee.buyerApprovedAt = new Date();
+      }
+
+      if (deal.guarantee.sellerApproved && deal.guarantee.buyerApproved) {
+        deal.mode = DealModeEnum.GUARANTEED;
+        deal.guarantee.enabled = true;
+        deal.status = DealStatusEnum.AWAITING_PAYMENT;
+        this.appendTimeline(deal, 'guarantee.approved', actorId);
+      } else {
+        this.appendTimeline(deal, 'guarantee.partial_approved', actorId, {
+          by: isSeller ? 'seller' : 'buyer',
+        });
+      }
+    } else {
+      deal.guarantee.enabled = false;
+      deal.guarantee.initiatedBy = null;
+      deal.guarantee.sellerApproved = false;
+      deal.guarantee.sellerApprovedAt = null;
+      deal.guarantee.buyerApproved = false;
+      deal.guarantee.buyerApprovedAt = null;
+      deal.mode = DealModeEnum.DIRECT;
+      deal.status = deal.startedAt
+        ? DealStatusEnum.SELLER_STARTED
+        : DealStatusEnum.PENDING_SELLER;
+      this.appendTimeline(deal, 'guarantee.declined', actorId, {
+        by: isSeller ? 'seller' : 'buyer',
+      });
+    }
+
+    this.persistDeal(deal);
+    return deal;
+  }
+
   public async getDealDetails(
     dealId: string,
     viewer: UserDocument,
@@ -293,6 +406,7 @@ export class DealService {
     actorId: string,
   ): Promise<DealDocument> {
     const deal = await this.getDealOrThrow(dealId);
+    this.ensureNoPendingGuarantee(deal);
     this.ensureSeller(deal, actorId);
 
     if (deal.status !== DealStatusEnum.PENDING_SELLER) {
@@ -318,6 +432,7 @@ export class DealService {
     actorId: string,
   ): Promise<DealDocument> {
     const deal = await this.getDealOrThrow(dealId);
+    this.ensureNoPendingGuarantee(deal);
     this.ensureBuyer(deal, actorId);
 
     if (
@@ -346,6 +461,7 @@ export class DealService {
     actorId: string,
   ): Promise<DealDocument> {
     const deal = await this.getDealOrThrow(dealId);
+    this.ensureNoPendingGuarantee(deal);
     this.ensureSeller(deal, actorId);
 
     if (deal.status !== DealStatusEnum.AWAITING_DELIVERY) {
@@ -370,6 +486,7 @@ export class DealService {
     actorId: string,
   ): Promise<DealDocument> {
     const deal = await this.getDealOrThrow(dealId);
+    this.ensureNoPendingGuarantee(deal);
     this.ensureBuyer(deal, actorId);
 
     if (deal.status !== DealStatusEnum.AWAITING_ACCEPTANCE) {
@@ -387,6 +504,7 @@ export class DealService {
     actorId: string,
   ): Promise<DealDocument> {
     const deal = await this.getDealOrThrow(dealId);
+    this.ensureNoPendingGuarantee(deal);
     this.ensureSeller(deal, actorId);
 
     if (
@@ -412,10 +530,21 @@ export class DealService {
     actorId: string,
   ): Promise<DealDocument> {
     const deal = await this.getDealOrThrow(dealId);
+    this.ensureNoPendingGuarantee(deal);
 
     const actorObjectId = this.toObjectId(actorId);
-    const isSeller = actorObjectId.equals(deal.seller);
-    const isBuyer = !!deal.buyer && actorObjectId.equals(deal.buyer);
+    const isSeller = actorObjectId.equals(
+      typeof deal.seller === 'string'
+        ? this.toObjectId(deal.seller)
+        : deal.seller?._id,
+    );
+    const isBuyer =
+      !!deal.buyer &&
+      actorObjectId.equals(
+        typeof deal.buyer === 'string'
+          ? this.toObjectId(deal.buyer)
+          : deal.buyer?._id,
+      );
 
     if (!isSeller && !isBuyer) {
       throw new ForbiddenException('Недостаточно прав для отмены сделки');
@@ -446,6 +575,7 @@ export class DealService {
     reason: string,
   ): Promise<DealDocument> {
     const deal = await this.getDealOrThrow(dealId);
+    this.ensureNoPendingGuarantee(deal);
     this.ensureParticipant(deal, actorId);
 
     if (deal.status === DealStatusEnum.DISPUTE) {
@@ -458,10 +588,82 @@ export class DealService {
       isOpen: true,
       reason,
       openedBy: this.toObjectId(actorId),
+      assignedTo: null,
       resolvedAt: null,
       resolution: null,
+      adminComment: null,
     };
     this.appendTimeline(deal, 'deal.dispute_opened', actorId, { reason });
+    this.persistDeal(deal);
+    return deal;
+  }
+
+  public async assignDisputeModerator(
+    dealId: string,
+    actorId: string,
+    roles: Role[] = [],
+  ): Promise<DealDocument> {
+    this.ensureAdminRole(roles);
+    const deal = await this.getDealOrThrow(dealId);
+
+    if (!deal.dispute?.isOpen) {
+      throw new BadRequestException('Активный спор не найден');
+    }
+
+    const assigned = this.extractObjectId(deal.dispute.assignedTo);
+    const actorObjectId = this.toObjectId(actorId);
+
+    if (assigned && !assigned.equals(actorObjectId)) {
+      throw new BadRequestException(
+        'Спор уже закреплен за другим администратором',
+      );
+    }
+
+    deal.dispute.assignedTo = actorObjectId;
+    this.appendTimeline(deal, 'dispute.assigned', actorId);
+    this.persistDeal(deal);
+    return deal;
+  }
+
+  public async resolveDispute(
+    dealId: string,
+    actorId: string,
+    roles: Role[] = [],
+    decision: DealDisputeResolutionDecision,
+    resolutionText?: string,
+    comment?: string,
+  ): Promise<DealDocument> {
+    this.ensureAdminRole(roles);
+    const deal = await this.getDealOrThrow(dealId);
+
+    if (!deal.dispute?.isOpen) {
+      throw new BadRequestException('Спор уже закрыт');
+    }
+
+    const actorObjectId = this.toObjectId(actorId);
+    const assigned = this.extractObjectId(deal.dispute.assignedTo);
+
+    if (assigned && !assigned.equals(actorObjectId)) {
+      throw new ForbiddenException('Спор закреплен за другим администратором');
+    }
+
+    deal.dispute.assignedTo = actorObjectId;
+    deal.dispute.isOpen = false;
+    deal.dispute.resolution = resolutionText ?? decision;
+    deal.dispute.resolvedAt = new Date();
+    deal.dispute.adminComment = comment ?? null;
+
+    if (decision === DealDisputeResolutionDecision.REFUND) {
+      deal.status = DealStatusEnum.CANCELLED;
+    } else {
+      deal.status = DealStatusEnum.ENDED;
+    }
+
+    this.appendTimeline(deal, 'dispute.resolved', actorId, {
+      decision,
+      resolution: resolutionText ?? decision,
+    });
+
     this.persistDeal(deal);
     return deal;
   }
@@ -473,6 +675,7 @@ export class DealService {
     message?: string,
   ): Promise<DealDocument> {
     const deal = await this.getDealOrThrow(dealId);
+    this.ensureNoPendingGuarantee(deal);
     this.ensureParticipant(deal, actorId);
 
     if (
@@ -515,6 +718,7 @@ export class DealService {
     accept: boolean,
   ): Promise<DealDocument> {
     const deal = await this.getDealOrThrow(dealId);
+    this.ensureNoPendingGuarantee(deal);
     this.ensureParticipant(deal, actorId);
 
     const counterOffer = (deal.counterOffers ?? []).find(
@@ -605,6 +809,20 @@ export class DealService {
 
   private toObjectId(id: string | Types.ObjectId): Types.ObjectId {
     return ValidatorHelper.validateObjectId(id);
+  }
+
+  private ensureNoPendingGuarantee(deal: DealDocument) {
+    if (deal.status === DealStatusEnum.GUARANTEE_PENDING) {
+      throw new BadRequestException(
+        'Сделка ожидает подтверждения перехода в гарант. Действие временно недоступно.',
+      );
+    }
+  }
+
+  private ensureAdminRole(roles: Role[] = []) {
+    if (!roles?.includes(Role.ADMIN)) {
+      throw new ForbiddenException('Требуются права администратора');
+    }
   }
 
   private appendTimeline(

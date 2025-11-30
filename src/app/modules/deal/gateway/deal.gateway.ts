@@ -45,13 +45,22 @@ import {
   IMessagesService,
 } from '../interfaces/deal.interfaces';
 import { IDealMemoryManagerService } from '../interfaces/memory-manager.service.interface';
-import { DealService } from '../services/deal.service';
+import {
+  DealService,
+  DealDisputeResolutionDecision,
+} from '../services/deal.service';
 import {
   DealCounterOfferDto,
   DealCounterOfferResponseDto,
   DealDisputeDto,
 } from '../dto/deal-action.dto';
-import { IsMongoId } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsMongoId,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 /**
  * Декоратор создает новый контекст для работы рест функций.
@@ -123,6 +132,26 @@ class DealCounterOfferRespondPayload extends DealCounterOfferResponseDto {
 
   @IsMongoId()
   counterOfferId: string;
+}
+
+class DealGuaranteeRespondPayload extends DealIdPayload {
+  @IsBoolean()
+  accept: boolean;
+}
+
+class DealDisputeAssignPayload extends DealIdPayload {}
+
+class DealDisputeResolvePayload extends DealIdPayload {
+  @IsEnum(DealDisputeResolutionDecision)
+  decision: DealDisputeResolutionDecision;
+
+  @IsOptional()
+  @IsString()
+  resolution?: string;
+
+  @IsOptional()
+  @IsString()
+  comment?: string;
 }
 
 @WebSocketGateway({
@@ -490,6 +519,15 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.messageBuckets.set(userId, recent);
   }
 
+  private getUserRoles(client: Socket): Role[] {
+    const roles = client.data.user?.roles;
+    return Array.isArray(roles) ? roles : [];
+  }
+
+  private isAdminClient(client: Socket): boolean {
+    return this.getUserRoles(client).includes(Role.ADMIN);
+  }
+
   /***************************************************************************
    * СОБЫТИЯ ОТ КЛИЕНТА
    ***************************************************************************/
@@ -652,6 +690,46 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return result;
   }
 
+  @SubscribeMessage('deal.requestGuarantee')
+  async handleRequestGuarantee(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: DealIdPayload,
+  ) {
+    try {
+      await ValidatorHelper.validateDto(DealIdPayload, payload);
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+    return await this.executeDealAction(
+      client,
+      payload.dealId,
+      (dealId, userId) =>
+        this.dealService.requestGuaranteeUpgrade(dealId, userId),
+    );
+  }
+
+  @SubscribeMessage('deal.respondGuarantee')
+  async handleRespondGuarantee(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: DealGuaranteeRespondPayload,
+  ) {
+    try {
+      await ValidatorHelper.validateDto(DealGuaranteeRespondPayload, payload);
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+    return await this.executeDealAction(
+      client,
+      payload.dealId,
+      (dealId, userId) =>
+        this.dealService.respondGuaranteeUpgrade(
+          dealId,
+          userId,
+          payload.accept,
+        ),
+    );
+  }
+
   @SubscribeMessage('deal.dispute')
   async handleDispute(
     @ConnectedSocket() client: Socket,
@@ -668,6 +746,73 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
       (dealId, userId) =>
         this.dealService.openDispute(dealId, userId, payload.reason),
     );
+  }
+
+  @SubscribeMessage('deal.dispute.assignModerator')
+  async handleDisputeAssign(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: DealDisputeAssignPayload,
+  ) {
+    try {
+      await ValidatorHelper.validateDto(DealDisputeAssignPayload, payload);
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+
+    if (!this.isAdminClient(client)) {
+      return SocketResponseHelper.sendErrorResponse(
+        client,
+        new ForbiddenException('Требуются права администратора'),
+      );
+    }
+
+    try {
+      const actorId = this.getUserId(client);
+      const deal = await this.dealService.assignDisputeModerator(
+        payload.dealId,
+        actorId,
+        this.getUserRoles(client),
+      );
+      this.dealManagerService.touch(payload.dealId);
+      return SocketResponseHelper.sendSuccessResponse(client, deal);
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+  }
+
+  @SubscribeMessage('deal.dispute.resolve')
+  async handleDisputeResolve(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: DealDisputeResolvePayload,
+  ) {
+    try {
+      await ValidatorHelper.validateDto(DealDisputeResolvePayload, payload);
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
+
+    if (!this.isAdminClient(client)) {
+      return SocketResponseHelper.sendErrorResponse(
+        client,
+        new ForbiddenException('Требуются права администратора'),
+      );
+    }
+
+    try {
+      const actorId = this.getUserId(client);
+      const deal = await this.dealService.resolveDispute(
+        payload.dealId,
+        actorId,
+        this.getUserRoles(client),
+        payload.decision,
+        payload.resolution,
+        payload.comment,
+      );
+      this.dealManagerService.touch(payload.dealId);
+      return SocketResponseHelper.sendSuccessResponse(client, deal);
+    } catch (e) {
+      return SocketResponseHelper.sendErrorResponse(client, e);
+    }
   }
 
   @SubscribeMessage('deal.counterOffer')
