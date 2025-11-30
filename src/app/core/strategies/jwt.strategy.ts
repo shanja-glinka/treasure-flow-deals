@@ -32,7 +32,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     );
 
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException(
+        'User not found:' + process.env.JWT_SECRET
+          ? 'ddd'
+          : 'your_jwt_secret' + ':' + payload.sub,
+      );
     }
 
     this.clsServiceAdapter.set(USER_KEY, user);
