@@ -25,6 +25,10 @@ import {
   UserCoinItemLogSchema,
 } from '../../core/schemas/user-coin-item-log.schema';
 import { Coin, CoinSchema } from '../../core/schemas/coin.schema';
+import {
+  CoinDealStat,
+  CoinDealStatSchema,
+} from '../../core/schemas/coin-deal-stat.schema';
 import { UserModule } from '../users/user.module';
 import { DealController } from './controllers/deal.controller';
 import { DealGateway } from './gateway/deal.gateway';
@@ -39,17 +43,21 @@ import { MessagesService } from './services/messages.service';
 import { DealNotificationService } from './services/deal-notification.service';
 import { QueueProcessorDeal } from './types';
 import { DealViewBuilder } from './services/deal-view.builder';
+import { DealStatsService } from './services/deal-stats.service';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Deal.name, schema: DealSchema },
       { name: DealMessageLog.name, schema: DealMessageLogSchema },
+      { name: CoinDealStat.name, schema: CoinDealStatSchema },
       { name: UserCoinItem.name, schema: UserCoinItemSchema },
       { name: UserCoinItemLog.name, schema: UserCoinItemLogSchema },
       { name: Coin.name, schema: CoinSchema },
     ]),
     ScheduleModule.forRoot(),
+    NotificationModule,
     UserModule,
     BullModule.registerQueueAsync({
       name: QueueProcessorDeal,
@@ -66,6 +74,7 @@ import { DealViewBuilder } from './services/deal-view.builder';
     DealScheduler,
     DealProcessor,
     DealViewBuilder,
+    DealStatsService,
     {
       provide: IDealRepositoryToken,
       useClass: DealRepository,

@@ -12,14 +12,14 @@ export enum NotificationTypeEnum {
 }
 
 export type NotificationMetadataType = {
-  serviceSource?: 'auction';
+  serviceSource?: 'deal';
   entityTarget?: 'user' | 'seller';
 };
 
 export class NotificationDocument {
   userId: string;
   type: NotificationTypeEnum = NotificationTypeEnum.MESSAGE;
-  service: string = 'favorites';
+  service: string = 'deals';
   channel?: NotificationChannelEnum;
   eventKey: NotificationEventKey;
   title: string;

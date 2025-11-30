@@ -13,4 +13,5 @@ export enum NotificationEventKey {
   COIN_LISTED = 'coin.listed',
   COIN_UPDATED = 'coin.updated',
   SEARCH_MATCH = 'search.match',
+  DEAL_FINISHED = 'deal.finished',
 }

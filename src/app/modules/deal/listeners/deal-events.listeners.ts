@@ -12,13 +12,15 @@ import {
   INotificationServiceToken,
 } from '@root/src/app/core/constants';
 import { DealDocument } from '@root/src/app/core/schemas/deal.schema';
+import { NotificationService as NotificationQueueService } from '../../notification/services/notification.service';
 import {
   DealMessageNotificationEvent,
   DealRoomNotificationEvent,
+  NotificationType,
 } from '../events/deal-notification.event';
-import { IDealRepository } from '../interfaces/deal.repository.interface';
 import { INotificationService } from '../interfaces/deal.interfaces';
-import { NotificationType } from '../events/deal-notification.event';
+import { IDealRepository } from '../interfaces/deal.repository.interface';
+import { DealStatsService } from '../services/deal-stats.service';
 
 @Injectable()
 export class DealEventsListener {
@@ -30,6 +32,10 @@ export class DealEventsListener {
 
     @Inject(INotificationServiceToken)
     private readonly notificationService: INotificationService,
+
+    private readonly notificationQueueService: NotificationQueueService,
+
+    private readonly dealStatsService: DealStatsService,
   ) {}
 
   @OnEvent(EventDealChanged, { async: true })
@@ -67,6 +73,10 @@ export class DealEventsListener {
       if (!deal) {
         return;
       }
+
+      await this.dealStatsService.recordDeal(deal);
+
+      await this.notificationQueueService.dealFinished(deal);
 
       await this.notificationService.notifyAllInRoom({
         roomId: deal._id,
