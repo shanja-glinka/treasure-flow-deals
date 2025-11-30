@@ -13,6 +13,7 @@ export class UserShortData {
   username: string;
   email: string;
   imageId?: string | null;
+  roles?: Role[];
 }
 
 export class User {

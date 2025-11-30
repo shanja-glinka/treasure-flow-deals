@@ -34,7 +34,7 @@ import {
 } from '@root/src/app/core/helpers';
 import { ClsServiceAdapter } from '@root/src/app/core/modules/cls/cls.service-adapter';
 import { DealDocument } from '@root/src/app/core/schemas/deal.schema';
-import { UserShortData } from '@root/src/app/core/schemas/user.schema';
+import { Role, UserShortData } from '@root/src/app/core/schemas/user.schema';
 import { Types } from 'mongoose';
 import { Server, Socket } from 'socket.io';
 import { IUserPublicService } from '../../users/interfaces/user-public-service.interface';
@@ -460,9 +460,10 @@ export class DealGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const user = client.data.user;
     return {
       _id: user._id,
-      username: user.username,
+      username: user.username ?? user.name ?? user.email,
       email: user.email,
       imageId: user.imageId,
+      roles: user.roles ?? [Role.USER],
     };
   }
 

@@ -6,10 +6,14 @@ import {
 } from '../events/deal-notification.event';
 import { INotificationService } from '../interfaces/deal.interfaces';
 import { DealGateway } from '../gateway/deal.gateway';
+import { DealViewBuilder } from './deal-view.builder';
 
 @Injectable()
 export class DealNotificationService implements INotificationService {
-  constructor(private readonly dealGateway: DealGateway) {}
+  constructor(
+    private readonly dealGateway: DealGateway,
+    private readonly dealViewBuilder: DealViewBuilder,
+  ) {}
 
   async notifyUser(event: DealUserNotificationEvent): Promise<void> {
     const userRoom = event.userId.toString();
@@ -22,8 +26,13 @@ export class DealNotificationService implements INotificationService {
     event: DealRoomNotificationEvent | DealMessageNotificationEvent,
   ): Promise<void> {
     const roomId = event.roomId.toString();
-    const payload =
-      'deal' in event ? event.deal : 'message' in event ? event.message : event;
+    let payload: any = event;
+
+    if ('deal' in event) {
+      payload = await this.dealViewBuilder.build(event.deal);
+    } else if ('message' in event) {
+      payload = event.message;
+    }
 
     this.dealGateway.server
       .to(roomId)

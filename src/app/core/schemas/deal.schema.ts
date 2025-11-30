@@ -1,6 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { BaseSchema } from '../common/base/schemas/base.schema';
+import {
+  DealMessageLog,
+  DealMessageLogSchema,
+} from './deal-message-log.schema';
 
 export enum DealModeEnum {
   GUARANTEED = 'guaranteed',
@@ -337,6 +341,9 @@ export class Deal extends BaseSchema {
 
   @Prop({ type: [DealTimelineEntrySchema], default: [] })
   timeline: DealTimelineEntry[];
+
+  @Prop({ type: [DealMessageLogSchema], default: [] })
+  messages: DealMessageLog[];
 
   @Prop({ type: Date, default: null })
   autoCancelAt: Date | null;

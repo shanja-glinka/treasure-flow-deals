@@ -29,6 +29,7 @@ import { DealMemoryManagerService } from './services/management/deal-memory.mana
 import { MessagesService } from './services/messages.service';
 import { DealNotificationService } from './services/deal-notification.service';
 import { QueueProcessorDeal } from './types';
+import { DealViewBuilder } from './services/deal-view.builder';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { QueueProcessorDeal } from './types';
     DealService,
     DealScheduler,
     DealProcessor,
+    DealViewBuilder,
     {
       provide: IDealRepositoryToken,
       useClass: DealRepository,

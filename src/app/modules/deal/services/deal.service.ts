@@ -24,6 +24,7 @@ import {
   DealModeEnum,
   DealStatusEnum,
 } from '../../../core/schemas/deal.schema';
+import { Role, UserDocument } from '../../../core/schemas/user.schema';
 import { IDealRepository } from '../interfaces/deal.repository.interface';
 import { IDealMemoryManagerService } from '../interfaces/memory-manager.service.interface';
 import { CreateDealRequestDto } from '../types';
@@ -32,6 +33,7 @@ import {
   DealRoomNotificationEvent,
   NotificationType,
 } from '../events/deal-notification.event';
+import { DealViewBuilder } from './deal-view.builder';
 
 @Injectable()
 export class DealService {
@@ -41,6 +43,8 @@ export class DealService {
 
     @Inject(IDealMemoryManagerServiceToken)
     private readonly dealMemoryManager: IDealMemoryManagerService,
+
+    private readonly dealViewBuilder: DealViewBuilder,
 
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -270,6 +274,15 @@ export class DealService {
     const viewAs = dto.modifier?.viewAs ?? DealViewAs.SELLER;
     const match = this.buildParticipantMatch(userId, viewAs);
     return this.dealRepository.countUserDeals(match, dto);
+  }
+
+  public async getDealDetails(
+    dealId: string,
+    viewer: UserDocument,
+  ): Promise<any> {
+    const deal = await this.getDealOrThrow(dealId);
+    this.ensureCanViewDeal(deal, viewer);
+    return this.dealViewBuilder.build(deal);
   }
 
   /**
@@ -567,6 +580,24 @@ export class DealService {
     }
   }
 
+  private ensureCanViewDeal(deal: DealDocument, viewer: UserDocument): void {
+    const roles = viewer?.roles ?? [];
+    if (roles.includes(Role.ADMIN)) {
+      return;
+    }
+
+    const viewerId = this.toObjectId(viewer._id);
+    const sellerId = this.extractObjectId(deal.seller);
+    const buyerId = this.extractObjectId(deal.buyer);
+
+    if (
+      (!sellerId || !viewerId.equals(sellerId)) &&
+      (!buyerId || !viewerId.equals(buyerId))
+    ) {
+      throw new ForbiddenException('Недостаточно прав для просмотра сделки');
+    }
+  }
+
   private toObjectId(id: string | Types.ObjectId): Types.ObjectId {
     return ValidatorHelper.validateObjectId(id);
   }
@@ -606,5 +637,32 @@ export class DealService {
     return {
       [field]: ValidatorHelper.validateObjectId(userId),
     };
+  }
+
+  private extractObjectId(
+    value:
+      | Types.ObjectId
+      | { _id?: Types.ObjectId }
+      | string
+      | null
+      | undefined,
+  ): Types.ObjectId | null {
+    if (!value) {
+      return null;
+    }
+    if (value instanceof Types.ObjectId) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      try {
+        return ValidatorHelper.validateObjectId(value);
+      } catch {
+        return null;
+      }
+    }
+    if ((value as any)?._id) {
+      return this.extractObjectId((value as any)._id);
+    }
+    return null;
   }
 }

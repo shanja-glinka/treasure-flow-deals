@@ -61,6 +61,7 @@ export class DealRepository implements IDealRepository {
         populate
           ? [
               'seller',
+              'buyer',
               {
                 path: 'item', // field in Deal referring to UserCoinItem
                 populate: {
@@ -102,6 +103,7 @@ export class DealRepository implements IDealRepository {
         populate
           ? [
               'seller',
+              'buyer',
               {
                 path: 'item', // field in Deal referring to UserCoinItem
                 populate: {

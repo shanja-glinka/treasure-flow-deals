@@ -82,6 +82,20 @@ export class DealController {
     return { count };
   }
 
+  @Get('/:dealId')
+  @Auth()
+  @ApiResponse({
+    status: 200,
+    description: 'Детальная информация по сделке.',
+  })
+  async getDeal(
+    @CurrentUser() user: UserDocument,
+    @Param('dealId') dealId: string,
+  ) {
+    this.ensureUser(user);
+    return this.dealService.getDealDetails(dealId, user);
+  }
+
   @Post('/:dealId/start')
   @Auth()
   async startDeal(
